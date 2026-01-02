@@ -230,30 +230,63 @@ audio { width:100%; border-radius:50px; height:45px; }
 </div>
 
 <script>
-// FUNKCIJA ZA ČITANJE URL PARAMETARA
+// ==================== KONFIGURACIJA ====================
+// 🔑 ZAMENITE OVAJ LINK SA PUBLISHED CSV LINKOM VAŠEG GOOGLE SHEETS-A
+const GOOGLE_SHEETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTjIXnMLrz-Lp2Fl1l60T0h_tawFOSbwNbQD9k6fj78UKNA3Vtuzvgy7MSIPeolmMMqwPLjh7S0KsTH/pub?output=csv';
+
+// ==================== GLAVNE FUNKCIJE ====================
+// Funkcija za čitanje parametara iz URL-a
 function getUrlParameter(name) {
     const urlParams = new URLSearchParams(window.location.search);
     return urlParams.get(name);
 }
 
-// PERSONALIZOVANE PRIČE ZA RAZLIČITA IMENA
+// Funkcija za učitavanje i pretragu podataka iz Google Sheets-a
+async function loadCustomerData(customerId) {
+    try {
+        console.log('🔍 Tražim kupca sa ID:', customerId, 'u Sheets-u...');
+        const response = await fetch(GOOGLE_SHEETS_CSV_URL);
+        
+        if (!response.ok) throw new Error(`Sheets nije dostupan (status: ${response.status})`);
+        
+        const csvText = await response.text();
+        const rows = csvText.split('\n').map(row => row.split(','));
+
+        // Preskoči zaglavlje (prvi red) i traži kupca
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            // row[0] = customer_id, row[1] = customer_name, row[2] = audio_url
+            if (row[0] && row[0].trim() === customerId) {
+                console.log('✅ Kupac pronađen:', row[1]);
+                return {
+                    name: row[1] ? row[1].trim() : null,
+                    audioUrl: row[2] ? row[2].trim() : null
+                };
+            }
+        }
+        console.warn('⚠️ Kupac nije pronađen u tabeli.');
+        return null; // Kupac nije pronađen
+        
+    } catch (error) {
+        console.error('❌ Greška pri učitavanju iz Sheets-a:', error);
+        return null;
+    }
+}
+
+// ==================== PERSONALIZOVANE PRIČE (opciono) ====================
 const personalizedStories = {
-    'Ana': 'Ana, tvoja poslastica je prošla kroz naše najpažljivije ruke. Svaki sloj krem je ručno pripreman, baš kao što su ručno odabrani trenuci koji čine tvoj dan posebnim...',
-    'Marko': 'Marko, torta koju držiš nastala je od ideje da sladjenje treba da bude avantura. Kombinacija ukusa koju smo odabrali govori o hrabrosti da se proba nešto novo...',
-    'Jelena': 'Jelena, tvoja torta je mali umeak savršenstva. Svaki detalj je osmisljen da podsjeti na ljepotu jednostavnih stvari - poput osmijeha koji donosi komad dobre torte...',
-    'Nikola': 'Nikola, ovaj desert je priča o tradiciji i modernosti. Kao što se i najlepše tradicije prenose generacijama, tako će i ukus ove torte ostati u sećanju...',
-    // Dodaj još imena po potrebi
+    'Ana': 'Ana, tvoja poslastica je prošla kroz naše najpažljivije ruke...',
+    'Marko': 'Marko, torta koju držiš nastala je od ideje da slatko treba da bude avantura...',
+    'Jelena': 'Jelena, tvoja torta je mali umeak savršenstva...',
+    'Nikola': 'Nikola, ovaj desert je priča o tradiciji i modernosti...',
 };
 
-// DEFAULT PRIČA
 const defaultStory = `Svaka torta iz Nana Sweets radnje nosi priču. Priču o pažljivo odabranim sastojcima, o trenucima radosti koje stvara, i o ljubavi koju ulažemo u svaki sloj. Dok držite ovu kutiju, držite deo naše duše. Sada vas pozivamo da čujete i zvuk te priče...`;
 
-document.addEventListener('DOMContentLoaded', function() {
-    // Pročitaj parametre iz URL-a
-    const customerName = getUrlParameter('ime');
-    const customerCode = getUrlParameter('kod');
-    
-    // ELEMENTI KOJE MENJAMO
+// ==================== GLAVNI DEO - POKRETANJE KADA SE STRANICA UČITA ====================
+document.addEventListener('DOMContentLoaded', async function() {
+    // 1. Pročitaj parametar iz URL-a (sada koristimo 'kupac', ne 'ime' ili 'kod')
+    const customerId = getUrlParameter('kupac'); // Očekujemo npr. ?kupac=pera
     const welcomeText = document.getElementById('welcome-text');
     const storyText = document.getElementById('story-text');
     const audioSource = document.getElementById('audioSource');
@@ -261,117 +294,103 @@ document.addEventListener('DOMContentLoaded', function() {
     const shareButton = document.getElementById('shareButton');
     const audioStatus = document.getElementById('audio-status');
     
-    // 1. PERSONALIZACIJA ZA KUPCA
-    if (customerName) {
-        welcomeText.innerHTML = `Zdravo <span class="customer-name">${customerName}</span>!<br>Poslušaj svoju ličnu poruku 🎂`;
+    let customerData = null;
+    let customerNameToUse = null;
+    let audioUrlToUse = null;
+    
+    // 2. Ako postoji ID kupca, pokušaj da učitaš podatke iz Sheets-a
+    if (customerId) {
+        customerData = await loadCustomerData(customerId);
+    }
+    
+    // 3. POSTAVI PERSONALIZOVANE PODATKE
+    if (customerData && customerData.name) {
+        // Koristi podatke iz Sheets-a
+        customerNameToUse = customerData.name;
+        audioUrlToUse = customerData.audioUrl;
         
-        // Personalizuj priču ako postoji
-        if (personalizedStories[customerName]) {
-            storyText.innerHTML = personalizedStories[customerName];
+        welcomeText.innerHTML = `Zdravo <span class="customer-name">${customerNameToUse}</span>!<br>Poslušaj svoju ličnu poruku 🎂`;
+        
+        // Personalizuj priču ako postoji u našem malom rečniku
+        if (personalizedStories[customerNameToUse]) {
+            storyText.innerHTML = personalizedStories[customerNameToUse];
         }
-    }
-    
-    // 2. POSTAVI AUDIO FAJL
-    if (customerCode) {
-        // Ako ima kod, koristi specifičan audio fajl
-        audioSource.src = `https://drive.google.com/uc?export=download&id=YOUR_AUDIO_ID_${customerCode}`;
+        
+        console.log('🎯 Koristim podatke iz Sheets-a.');
+        
     } else {
-        // Default audio fajl za sve
-        audioSource.src = "https://www.dropbox.com/scl/fi/zl83tbmc3x4q3ki77e2w3/ElevenLabs_2025-12-25T03_07_47_Liam-Energetic-Social-Media-Creator_pre_sp100_s50_sb75_v3.mp3?rlkey=3h4g5lq3wvhh5rm4a38ou9hq1&st=cfr7nfqn&dl=1";
+        // Fallback: Koristi stari sistem sa 'ime' parametrom ako postoji (za kompatibilnost)
+        const oldStyleName = getUrlParameter('ime');
+        if (oldStyleName) {
+            customerNameToUse = oldStyleName;
+            welcomeText.innerHTML = `Zdravo <span class="customer-name">${customerNameToUse}</span>!<br>Poslušaj svoju ličnu poruku 🎂`;
+            if (personalizedStories[customerNameToUse]) {
+                storyText.innerHTML = personalizedStories[customerNameToUse];
+            }
+        }
+        console.log('ℹ️ Koristim podrazumevane podatke.');
     }
     
-    // Ponovo učitaj audio plejer
-    audioPlayer.load();
-    
-    // 3. DODAJ PARAMETRE NA SHARE LINK
-    if (customerName || customerCode) {
-        let shareUrl = 'share.html?';
-        if (customerName) shareUrl += `ime=${encodeURIComponent(customerName)}&`;
-        if (customerCode) shareUrl += `kod=${encodeURIComponent(customerCode)}`;
-        shareButton.href = shareUrl;
+    // 4. POSTAVI AUDIO FAJL
+    if (audioUrlToUse) {
+        // Koristi link iz Sheets-a
+        audioSource.src = audioUrlToUse;
+    } else {
+        // Fallback: Vaš default Dropbox audio (PROVERITE DA LI JE LINK RAWL=1!)
+        audioSource.src = "https://www.dropbox.com/scl/fi/zl83tbmc3x4q3ki77e2w3/ElevenLabs_2025-12-25T03_07_47_Liam.mp3?raw=1"; // 👈 Promenjeno u ?raw=1
     }
     
-    // 4. PRAĆENJE SLUŠANJA AUDIO
+    audioPlayer.load(); // Ponovo učitaj plejer
+    
+    // 5. AŽURIRAJ SHARE LINK (šalje customerId dalje)
+    if (customerId) {
+        shareButton.href = `https://nanasweets.github.io/nanasweetsaudio/share.html?kupac=${encodeURIComponent(customerId)}`;
+    } else if (customerNameToUse) {
+        // Fallback za stari sistem
+        shareButton.href = `https://nanasweets.github.io/nanasweetsaudio/share.html?ime=${encodeURIComponent(customerNameToUse)}`;
+    }
+    
+    // 6. PRAĆENJE SLUŠANJA AUDIO (Ostaje isto)
     audioPlayer.addEventListener('play', function() {
         audioStatus.innerHTML = "🎵 Slušate ličnu poruku... Ova priča sada postaje zvuk!";
         audioStatus.style.color = "#ff1493";
-        
-        // Snimi da je korisnik poslušao audio
         localStorage.setItem('nana_audio_listened', 'true');
         localStorage.setItem('nana_listen_time', new Date().toISOString());
         
-        // Animiraj dugme nakon slušanja
         setTimeout(function() {
             shareButton.innerHTML = `<i class="fas fa-gift"></i> Sada osvoji svoj vaučer! 🎁`;
             shareButton.style.background = "linear-gradient(90deg,#4CAF50 0%,#45a049 100%)";
-        }, 30000); // Nakon 30 sekundi (prosečno trajanje audio poruke)
+        }, 30000);
     });
     
     audioPlayer.addEventListener('ended', function() {
         audioStatus.innerHTML = "✅ Priča je završena! Sada je vreme za vaš vaučer.";
         audioStatus.style.color = "#4CAF50";
-        
-        // Promeni tekst na dugmetu
         shareButton.innerHTML = `<i class="fas fa-gift"></i> Osvoji vaučer ODMAH! 🎁`;
         shareButton.style.background = "linear-gradient(90deg,#FF5722 0%,#FF9800 100%)";
         shareButton.style.animation = "pulse 1.5s infinite";
         
-        // Dodaj CSS animaciju
         const style = document.createElement('style');
-        style.innerHTML = `
-            @keyframes pulse {
-                0% { transform: translateY(-3px); box-shadow: 0 10px 25px rgba(255,87,34,0.4); }
-                50% { transform: translateY(-5px); box-shadow: 0 15px 30px rgba(255,87,34,0.6); }
-                100% { transform: translateY(-3px); box-shadow: 0 10px 25px rgba(255,87,34,0.4); }
-            }
-        `;
+        style.innerHTML = `@keyframes pulse { 
+            0% { transform: translateY(-3px); box-shadow: 0 10px 25px rgba(255,87,34,0.4); }
+            50% { transform: translateY(-5px); box-shadow: 0 15px 30px rgba(255,87,34,0.6); }
+            100% { transform: translateY(-3px); box-shadow: 0 10px 25px rgba(255,87,34,0.4); }
+        }`;
         document.head.appendChild(style);
     });
     
-    // 5. BROJAČ POSETA
+    // 7. BROJAČ POSETA (Ostaje isto)
     let visitCount = localStorage.getItem('nana_visit_count') || 0;
     visitCount = parseInt(visitCount) + 1;
     localStorage.setItem('nana_visit_count', visitCount);
-    document.getElementById('visit-counter').textContent = `Poseta: ${visitCount}`;
+    const visitCounterEl = document.getElementById('visit-counter');
+    if (visitCounterEl) visitCounterEl.textContent = `Poseta: ${visitCount}`;
     
-    // 6. SIMPLIFIED ANALYTICS
-    console.log('Stranica učitana za kupca:', customerName || 'nepoznato', 'Kod:', customerCode || 'nema');
-    
-    // 7. DODATNA INTERAKCIJA - HOVER EFIKAT NA PRIČU
-    storyText.addEventListener('mouseover', function() {
-        this.style.transition = 'all 0.3s ease';
-        this.style.color = '#ff1493';
-    });
-    
-    storyText.addEventListener('mouseout', function() {
-        this.style.color = '#555';
-    });
-    
-    // 8. PROVERI DA LI JE VEĆ SLUŠAO AUDIO
+    // 8. PROVERA DA LI JE VEĆ SLUŠANO (Ostaje isto)
     if (localStorage.getItem('nana_audio_listened') === 'true') {
         audioStatus.innerHTML = "🎧 Već ste slušali poruku! Sada podelite iskustvo.";
         audioStatus.style.color = "#9C27B0";
         shareButton.innerHTML = `<i class="fas fa-share-alt"></i> Podeli i osvoji vaučer 🎁`;
     }
 });
-
-// Dodatna funkcija za prikaz vremena
-function updateTime() {
-    const now = new Date();
-    const timeString = now.toLocaleTimeString('sr-RS', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-    });
-    
-    // Možeš dodati vreme negde ako želiš
-    // console.log('Trenutno vreme:', timeString);
-}
-
-setInterval(updateTime, 60000); // Ažuriraj svakog minuta
 </script>
-</body>
-</html>
-    
-  </body>
-  
-</html>
